@@ -73,6 +73,7 @@ try:
 except ImportError:
     import xml.etree.ElementTree as ET
 import numpy as np
+from scipy import stats
 from scipy import sparse
 import extractors
 from extractors import ffs
@@ -173,6 +174,56 @@ def make_design_mat(fds, global_feat_dict=None):
                    shape=(len(fds), len(feat_dict)))
     return X, feat_dict
     
+
+def train_generative(X, T, num_classes):
+    """
+    arguments:
+        X is a numpy array containing all the data points
+        T is the corresponding numpy array containing the classes the X[i] are in
+
+    returns:
+        an array of the distributions of the multiv normals for each class
+    """
+    # number of data points
+    n = len(T) 
+    # number of features
+    d = len(X[0])
+
+    # separate into different lists by class
+    classes = [[]] * 15
+    for x, t in zip(X,T):
+        classes[t].append(x)
+
+    # a list of (mean,cov) for each class
+    distribs = []
+
+    # calculate the mean/covariance of each class
+    for i in xrange(15):
+        data = np.array(classes[i])
+        mean = np.mean(data, axis=0)
+        cov = np.cov(data.T)
+        # store
+        distribs[i] = (mean, cov)
+
+    return distribs
+
+
+def generative_classifier(X, distribs):
+    """
+    arguments:
+        X is the array of features for the test data.
+        distribs is the list of (mean, cov) pairs for each classifier
+        outputfile is the path to the file where we'll make our predictions
+    returns
+        the array of predictions
+    """
+    preds = []
+
+    for x in X:
+        probs = [stats.multivariate_normal.pdf(x, mean=mean, cov=cov) for (mean,cov) in distribs]
+        preds.append(np.argmax(probs))
+
+    return preds
 
 ## The following function does the feature extraction, learning, and prediction
 def main():
