@@ -186,11 +186,15 @@ def train_generative(X, T, num_classes):
     """
     # number of data points
     n = len(T) 
+
+    # expand the matrix
+    X = np.array(X.todense())
+
     # number of features
     d = len(X[0])
 
     # separate into different lists by class
-    classes = [[]] * 15
+    classes = [[]] * d
     for x, t in zip(X,T):
         classes[t].append(x)
 
@@ -198,7 +202,7 @@ def train_generative(X, T, num_classes):
     distribs = []
 
     # calculate the mean/covariance of each class
-    for i in xrange(15):
+    for i in xrange(d):
         data = np.array(classes[i])
         mean = np.mean(data, axis=0)
         cov = np.cov(data.T)
@@ -208,7 +212,7 @@ def train_generative(X, T, num_classes):
     return distribs
 
 
-def generative_classifier(X, distribs):
+def gen_classifier(X, distribs):
     """
     arguments:
         X is the array of features for the test data.
@@ -239,7 +243,8 @@ def main():
     
     # TODO train here, and learn your classification parameters
     print "learning..."
-    learned_W = np.random.random((len(global_feat_dict),len(util.malware_classes)))
+    # learned_W = np.random.random((len(global_feat_dict),len(util.malware_classes)))
+    distribs = train_generative(X_train, t_train, len(global_feat_dict))
     print "done learning"
     print
     
@@ -254,7 +259,8 @@ def main():
     
     # TODO make predictions on text data and write them out
     print "making predictions..."
-    preds = np.argmax(X_test.dot(learned_W),axis=1)
+    # preds = np.argmax(X_test.dot(learned_W),axis=1)
+    preds = gen_classifier(X_test, distribs)
     print "done making predictions"
     print
     

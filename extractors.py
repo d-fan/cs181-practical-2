@@ -15,10 +15,10 @@ def extractor(feature_extractor):
 
 @extractor
 def syscall_count(tree):
-	"""
-	Counts the number of each system call and returns the result as a Counter
-	(dict) mapping 'sys_call': count
-	"""
+    """
+    Counts the number of each system call and returns the result as a Counter
+    (dict) mapping 'sys_call': count
+    """
     c = Counter()
     in_all_section = False
     for el in tree.iter():
@@ -28,7 +28,7 @@ def syscall_count(tree):
         elif el.tag == "all_section" and in_all_section:
             in_all_section = False
         elif in_all_section:
-        	# Increment our count of this syscall
+            # Increment our count of this syscall
             c[el.tag] += 1
             
     return c
