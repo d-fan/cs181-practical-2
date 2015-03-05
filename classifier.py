@@ -77,8 +77,12 @@ from scipy import stats
 from scipy import sparse
 import extractors
 from extractors import ffs
-
+from numpy import matlib, exp
+import matplotlib.pyplot as plt
+import sklearn.linear_model
+import pickle
 import util
+import sys
 
 def extract_feats(ffs, direc="train", global_feat_dict=None):
     """
@@ -103,6 +107,7 @@ def extract_feats(ffs, direc="train", global_feat_dict=None):
     ids = [] 
     for datafile in os.listdir(direc):
         # extract id and true class (if available) from filename
+        # Keep it clazzy
         id_str,clazz = datafile.split('.')[:2]
         ids.append(id_str)
         # add target class if this is training data
@@ -118,6 +123,7 @@ def extract_feats(ffs, direc="train", global_feat_dict=None):
         tree = ET.parse(os.path.join(direc,datafile))
         # accumulate features
         [rowfd.update(ff(tree)) for ff in ffs]
+        #print rowfd
         fds.append(rowfd)
         
     X,feat_dict = make_design_mat(fds,global_feat_dict)
@@ -174,6 +180,80 @@ def make_design_mat(fds, global_feat_dict=None):
                    shape=(len(fds), len(feat_dict)))
     return X, feat_dict
     
+def sigma(clazz, features, weights):
+    """
+    Gives the probability that an observation with 'feature' is of class
+    'clazz', given the weights.
+
+    Both arguments should be numpy arrays
+    """
+    # w_k = weights[clazz]
+    # phi = features
+    # a_k = w_k . phi = dot(wegihts[clazz], features)
+    
+    # Sum of exp(a_j) = Sum of exp(w_k . phi)
+    denominator = sum([exp(weights[k] * features.T) 
+        for k in xrange(len(weights))])
+    #print "Denominator", denominator
+
+    #print "Numerator", exp(weights[clazz] * features.T)
+    #      exp(a_k) = exp(w_k . phi)
+    ret = exp(weights[clazz] * features.T) / denominator
+    #print "Ret: ", ret
+    return ret
+
+def logistic(features, targets, weights, max_iter = 1000):
+    """
+    DO NOT USE THIS!!!! IT'S NOT DONE
+    Uses Newton-Raphson to minimize error
+
+    All arguments should be numpy matrices
+    """
+    assert(type(features) == np.matrix)
+    assert(type(targets)  == np.matrix)
+    assert(type(weights)  == np.matrix)
+    assert(len(features)  == len(targets))
+    assert(len(features[0]) == len(weights[0]))
+
+    # y_n = sigma_n(w . phi)
+    # R_nn = y_n * (1 - y_n)
+    # grad E(W) = Phi . Phi . W - Phi . T = Phi . (Y - T)
+    # H = Phi . Phi = Phi . R . Phi
+    # 
+    # W = (Phi . R . Phi)^-1 . Phi . R . (Phi . W - R^-1 (Y - T))
+    
+    # Number of features
+    N = len(features)
+    # Initialize R to N x N array of 0s, Y to N 0s
+    R = matlib.zeros((N,N))
+    Y = matlib.zeros((N,1))     # Column vector
+
+    for i in xrange(max_iter):
+        for n in xrange(2):
+            print "Y:", Y
+            Y[n] = sigma(n, features[n], weights)
+            R[n,n] = Y[n] * (1-Y[n])
+        print R
+
+        # Bishop 4.100: Z = Phi . W - R^-1 (Y - T)
+        Z = features * weights.T - R**-1 * (Y.T - targets)
+        weights = (features.T * R * features)**-1 * features * R * Z
+
+    pass
+
+def sk_logistic(features, targets, regularization = 0.001):
+    """
+    Use Scikit Learn 'cause I'm lazy
+    First return value is a function that returns a class number based on the input vector
+    Second is the actual model objet
+    """
+
+    logreg = sklearn.linear_model.LogisticRegression(C=regularization)
+    logreg.fit(features, targets)
+
+    def predictor(feat):
+        return logreg.predict(feat)[0]
+    return predictor, logreg
 
 def train_generative(X, T, num_classes):
     """
@@ -230,21 +310,42 @@ def gen_classifier(X, distribs):
     return preds
 
 ## The following function does the feature extraction, learning, and prediction
-def main():
+def main(load = False):
     train_dir = "train"
     test_dir = "test"
     outputfile = "mypredictions.csv"  # feel free to change this or take it as an argument
     
-    # extract features
-    print "extracting training features..."
-    X_train,global_feat_dict,t_train,train_ids = extract_feats(ffs, train_dir)
-    print "done extracting training features"
-    print
+    if not load:
+        # extract features
+        print "extracting training features..."
+        X_train,global_feat_dict,t_train,train_ids = extract_feats(ffs, train_dir)
+        print "done extracting training features"
+        print
+        print "Saving features"
+        with open("X_train", "w") as out:
+            pickle.dump(X_train, out)
+        with open("global_feat_dict", "w") as out:
+            pickle.dump(global_feat_dict, out)
+        with open("t_train", "w") as out:
+            pickle.dump(t_train, out)
+        with open("train_ids", "w") as out:
+            pickle.dump(train_ids, out)
+        print "Done saving"
+        print
+    else:
+        print "Loading previous features"
+        with open("X_train", "r")           as out: X_train =           pickle.load(out)
+        with open("global_feat_dict", "r")  as out: global_feat_dict =  pickle.load(out)
+        with open("t_train", "r")           as out: t_train =           pickle.load(out)
+        with open("train_ids", "r")         as out: train_ids =         pickle.load(out)
+        print "Done loading"
+        print
     
     # TODO train here, and learn your classification parameters
     print "learning..."
-    # learned_W = np.random.random((len(global_feat_dict),len(util.malware_classes)))
+    # predictor, _ = sk_logistic(X_train, t_train)
     distribs = train_generative(X_train, t_train, len(global_feat_dict))
+    # Start with logistic regression
     print "done learning"
     print
     
@@ -258,8 +359,16 @@ def main():
     print
     
     # TODO make predictions on text data and write them out
+    error = 0
+    total = X_train.shape[0]
     print "making predictions..."
     # preds = np.argmax(X_test.dot(learned_W),axis=1)
+    # for index, feats in enumerate(X_train):
+    #     prediction = predictor(feats)
+    #     if (prediction != t_train[index]):
+    #         print "%s: expected %d but got %d" % (train_ids[index], t_train[index], prediction)
+    #         error += 1
+    # print "Correct: %d, Incorrect: %d, Total: %d, Accuracy: %f" % (total - error, error, total, (total - error) / (1.0 * total))
     preds = gen_classifier(X_test, distribs)
     print "done making predictions"
     print
@@ -269,5 +378,5 @@ def main():
     print "done!"
 
 if __name__ == "__main__":
-    main()
+    main("load" in sys.argv)
     

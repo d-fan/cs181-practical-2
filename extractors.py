@@ -13,6 +13,13 @@ def extractor(feature_extractor):
     ffs.append(feature_extractor)
     return feature_extractor
 
+"""
+DLL file & address location
+Registry key access
+web addresses
+
+"""
+
 @extractor
 def syscall_count(tree):
     """
