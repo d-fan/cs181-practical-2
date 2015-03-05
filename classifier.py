@@ -83,7 +83,7 @@ import pickle
 import util
 import sys
 
-def extract_feats(ffs, direc="train", global_feat_dict=None):
+def extract_feats(ffs, direc="train", global_feat_dict=None, silent=True):
     """
     arguments:
       ffs are a list of feature-functions.
@@ -104,7 +104,11 @@ def extract_feats(ffs, direc="train", global_feat_dict=None):
     fds = [] # list of feature dicts
     classes = []
     ids = [] 
-    for datafile in os.listdir(direc):
+    directory = os.listdir(direc)
+    file_count = len(directory)
+    for index, datafile in enumerate(directory):
+        if not silent and index % 100 == 0:
+            print "   Extracted %d of %d" % (index, file_count)
         # extract id and true class (if available) from filename
         # Keep it clazzy
         id_str,clazz = datafile.split('.')[:2]
