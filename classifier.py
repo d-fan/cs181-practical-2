@@ -266,29 +266,23 @@ def train_generative(X, T, num_classes):
     """
     # number of data points
     n = len(T) 
-
     # expand the matrix
     X = np.array(X.todense())
-
     # number of features
-    d = len(X[0])
-
+    d = X.shape[1]
     # separate into different lists by class
     classes = [[]] * d
     for x, t in zip(X,T):
         classes[t].append(x)
-
     # a list of (mean,cov) for each class
     distribs = []
-
     # calculate the mean/covariance of each class
     for i in xrange(d):
         data = np.array(classes[i])
         mean = np.mean(data, axis=0)
         cov = np.cov(data.T)
         # store
-        distribs[i] = (mean, cov)
-
+        distribs.append((mean, cov))
     return distribs
 
 
@@ -301,16 +295,17 @@ def gen_classifier(X, distribs):
     returns
         the array of predictions
     """
+    # expand the matrix
+    X = np.array(X.todense())
     preds = []
 
     for x in X:
-        probs = [stats.multivariate_normal.pdf(x, mean=mean, cov=cov) for (mean,cov) in distribs]
+        probs = [stats.multivariate_normal.pdf(x, mean=mean, cov=cov, allow_singular=True) for (mean,cov) in distribs]
         preds.append(np.argmax(probs))
-
     return preds
 
 ## The following function does the feature extraction, learning, and prediction
-def main(load = False):
+def main(load = False, test=False):
     train_dir = "train"
     test_dir = "test"
     outputfile = "mypredictions.csv"  # feel free to change this or take it as an argument
@@ -335,24 +330,27 @@ def main(load = False):
     else:
         print "Loading previous features"
         with open("X_train", "r")           as out: X_train =           pickle.load(out)
+
         with open("global_feat_dict", "r")  as out: global_feat_dict =  pickle.load(out)
+
         with open("t_train", "r")           as out: t_train =           pickle.load(out)
+
         with open("train_ids", "r")         as out: train_ids =         pickle.load(out)
         print "Done loading"
         print
     
     # TODO train here, and learn your classification parameters
     print "learning..."
-    # predictor, _ = sk_logistic(X_train, t_train)
-    distribs = train_generative(X_train, t_train, len(global_feat_dict))
+    predictor, _ = sk_logistic(X_train, t_train)
+    # distribs = train_generative(X_train, t_train, len(global_feat_dict))
     # Start with logistic regression
     print "done learning"
     print
     
     # get rid of training data and load test data
-    del X_train
-    del t_train
-    del train_ids
+    # del X_train
+    # del t_train
+    # del train_ids
     print "extracting test features..."
     X_test,_,t_ignore,test_ids = extract_feats(ffs, test_dir, global_feat_dict=global_feat_dict)
     print "done extracting test features"
@@ -363,13 +361,22 @@ def main(load = False):
     total = X_train.shape[0]
     print "making predictions..."
     # preds = np.argmax(X_test.dot(learned_W),axis=1)
-    # for index, feats in enumerate(X_train):
-    #     prediction = predictor(feats)
-    #     if (prediction != t_train[index]):
-    #         print "%s: expected %d but got %d" % (train_ids[index], t_train[index], prediction)
+    # preds = gen_classifier(X_train, distribs)
+    # for t_id, p, t in zip(train_ids, preds, t_train):
+    #     if (p != t):
+    #         print "%s: expected %d but got %d" % (t_id, t, p)
     #         error += 1
-    # print "Correct: %d, Incorrect: %d, Total: %d, Accuracy: %f" % (total - error, error, total, (total - error) / (1.0 * total))
-    preds = gen_classifier(X_test, distribs)
+    if test:
+        preds = []
+        for x in X_test:
+            preds.append(predictor(x))
+    else:
+        for index, feats in enumerate(X_train):
+            prediction = predictor(feats)
+            if (prediction != t_train[index]):
+                print "%s: expected %d but got %d" % (train_ids[index], t_train[index], prediction)
+                error += 1
+        print "Correct: %d, Incorrect: %d, Total: %d, Accuracy: %f" % (total - error, error, total, (total - error) / (1.0 * total))
     print "done making predictions"
     print
     
@@ -378,5 +385,5 @@ def main(load = False):
     print "done!"
 
 if __name__ == "__main__":
-    main("load" in sys.argv)
+    main("load" in sys.argv, "test" in sys.argv)
     
