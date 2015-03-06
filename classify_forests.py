@@ -1,7 +1,9 @@
 import os
 import sys
 import numpy as np
+import random
 import pickle
+from datetime import datetime
 from scipy import stats
 from scipy import sparse
 from sklearn.ensemble import RandomForestClassifier
@@ -49,21 +51,23 @@ def main(load = False, test=False, both=False):
         n = Xs.shape[0]
         train_pct = 0.8
 
-        X_train = Xs[:int(n*train_pct)]
-        t_train = ts[:int(n*train_pct)]
-        train_ids = ids[:int(n*train_pct)]
+        X_train = Xs[-int(n*train_pct):]
+        t_train = ts[-int(n*train_pct):]
+        train_ids = ids[-int(n*train_pct):]
         
-        X_holdout = Xs[int(n*train_pct):n]
-        t_holdout = ts[int(n*train_pct):n]
-        holdout_ids = ids[int(n*train_pct):n]
+        X_holdout = Xs[:-int(n*train_pct)]
+        t_holdout = ts[:-int(n*train_pct)]
+        holdout_ids = ids[:-int(n*train_pct)]
         print
     # TODO train here, and learn your classification parameters
     print "learning..."
-    num_trees = 50
+    num_trees = 100
     forest = RandomForestClassifier(n_estimators = num_trees)
     forest = forest.fit(X_train.todense(), t_train)
-    # copied from Cameron's code
-    predictor, random_forest = sk_random_forest(X_train.toarray(), t_train, num_trees = 100)
+    # Random forest predictor
+    forest_predictor, _ = sk_random_forest(X_train.toarray(), t_train, num_trees = num_trees)
+    # logistic regression predictor
+    # log_predictor, _ = sk_logistic(X_train, t_train)
     print "done learning"
     print
     
@@ -108,8 +112,23 @@ def main(load = False, test=False, both=False):
         print "making predictions..."
         #preds = np.argmax(X_test.dot(learned_W),axis=1)
         #preds = logreg.predict(X_test)
+        random.seed(datetime.now())
         for index, feats in enumerate(X_holdout.toarray()):
-            prediction = predictor(feats)
+            pred_forest = forest_predictor(feats)
+            # pred_logistic = log_predictor(feats)
+            # #if they agree, or disagree and both predict malware
+            # if pred_forest == pred_logistic or (pred_forest != 8 and pred_logistic != 8):
+            #     prediction = pred_forest
+            # else:
+            #     # grab the non-"None" label
+            #     other = pred_forest if pred_forest != 8 else pred_logistic
+            #     # flip a coin
+            #     if random.random() < 0.39:
+            #         prediction = 8
+            #     else:
+            #         prediction = other
+            prediction = pred_forest
+
             if (prediction != t_holdout[index]):
                 print "%s: expected %d but got %d" % (holdout_ids[index], t_holdout[index], prediction)
                 error += 1
