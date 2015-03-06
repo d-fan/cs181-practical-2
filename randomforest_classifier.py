@@ -338,8 +338,8 @@ def main(load = False):
     
     # TODO make predictions on text data and write them out
     #X_holdout_pca = pca.transform(X_holdout.toarray())
-    #error = 0
-    #total = X_holdout.shape[0]
+    error = 0
+    total = X_holdout.shape[0]
     print "making predictions..."
     #preds = np.argmax(X_test.dot(learned_W),axis=1)
     #preds = logreg.predict(X_test)

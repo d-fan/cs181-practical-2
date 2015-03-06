@@ -9,7 +9,7 @@ import util
 from classifier import extract_feats, sk_logistic
 import extractors
 from extractors import ffs
-
+from randomforest_classifier import sk_random_forest
 
 ## The following function does the feature extraction, learning, and prediction
 def main(load = False, test=False, both=False):
@@ -33,23 +33,37 @@ def main(load = False, test=False, both=False):
         with open("train_ids", "w") as out:
             pickle.dump(train_ids, out)
         print "Done saving"
-        print
     else:
         print "Loading previous features"
         with open("X_train", "r")           as out: X_train =           pickle.load(out)
-
         with open("global_feat_dict", "r")  as out: global_feat_dict =  pickle.load(out)
-
         with open("t_train", "r")           as out: t_train =           pickle.load(out)
-
         with open("train_ids", "r")         as out: train_ids =         pickle.load(out)
         print "Done loading"
         print
-    
+
+    # if we're verifying things, save some test data
+    if not test:
+        print "Getting holdout data..."
+        Xs, ts, ids = (X_train, t_train, train_ids)
+        n = Xs.shape[0]
+        train_pct = 0.8
+
+        X_train = Xs[:int(n*train_pct)]
+        t_train = ts[:int(n*train_pct)]
+        train_ids = ids[:int(n*train_pct)]
+        
+        X_holdout = Xs[int(n*train_pct):n]
+        t_holdout = ts[int(n*train_pct):n]
+        holdout_ids = ids[int(n*train_pct):n]
+        print
     # TODO train here, and learn your classification parameters
     print "learning..."
-    forest = RandomForestClassifier(n_estimators = 50)
+    num_trees = 50
+    forest = RandomForestClassifier(n_estimators = num_trees)
     forest = forest.fit(X_train.todense(), t_train)
+    # copied from Cameron's code
+    predictor, random_forest = sk_random_forest(X_train.toarray(), t_train, num_trees = 100)
     print "done learning"
     print
     
@@ -90,15 +104,18 @@ def main(load = False, test=False, both=False):
         print "done!"
     else:
         error = 0
-        total = X_train.shape[0]
-        # TODO verify things here
-        for index, feats in enumerate(X_train):
+        total = X_holdout.shape[0]
+        print "making predictions..."
+        #preds = np.argmax(X_test.dot(learned_W),axis=1)
+        #preds = logreg.predict(X_test)
+        for index, feats in enumerate(X_holdout.toarray()):
             prediction = predictor(feats)
-            if (prediction != t_train[index]):
-                print "%s: expected %d but got %d" % (train_ids[index], t_train[index], prediction)
+            if (prediction != t_holdout[index]):
+                print "%s: expected %d but got %d" % (holdout_ids[index], t_holdout[index], prediction)
                 error += 1
         print "Correct: %d, Incorrect: %d, Total: %d, Accuracy: %f" % (total - error, error, total, (total - error) / (1.0 * total))
-    
+        print "done making predictions"
+        print
     print
 
 
