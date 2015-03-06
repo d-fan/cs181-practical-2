@@ -13,18 +13,11 @@ def extractor(feature_extractor):
     ffs.append(feature_extractor)
     return feature_extractor
 
-"""
-DLL file & address location
-Registry key access
-web addresses
-
-"""
-
 @extractor
 def syscall_count(tree):
     """
-    Counts the number of each system call and returns the result as a Counter
-    (dict) mapping 'sys_call': count
+      Counts the number of each system call and returns the result as a Counter
+	(dict) mapping 'sys_call': count
     """
     c = Counter()
     in_all_section = False
@@ -35,46 +28,13 @@ def syscall_count(tree):
         elif el.tag == "all_section" and in_all_section:
             in_all_section = False
         elif in_all_section:
-            # Increment our count of this syscall
+        	# Increment our count of this syscall
             c[el.tag] += 1
             
     return c
 
-@extractor
-def dll_loads(tree):
-    """
-    Counts how many times a dll gets loaded by each program (should be 1 or 0)
-    """
-    c = Counter()
-    for el in tree.iter():
-        if el.tag == "load_dll" and "filename" in el.attrib:
-            file_path = el.attrib["filename"]
-            # Get the last part which should be *.dll
-            file_name = file_path.split("\\")[-1].lower()
-            # Soft assertion
-            # if (len(file_name) != 0 and "dll" not in file_name):
-            #     print "Bad dll: %s" % file_path
-            c[file_name] += 1
-    return c
 
-@extractor
-def reg_key_final_name(tree):
-    return Counter();
-
-@extractor
-def reg_values(tree):
-    """
-    Looks at syscalls to 'query_value' and counts how many times each value was accessed
-    """
-    c = Counter()
-    for el in tree.iter():
-        if el.tag == "query_value" and "value" in el.attrib:
-            # Increment our count of this syscall
-            c[el.attrib["value"]] += 1
-            
-    return c
-
-## Here are two example feature-functions. They each take an xml.etree.ElementTree object, 
+# Here are two example feature-functions. They each take an xml.etree.ElementTree object, 
 # (i.e., the result of parsing an xml file) and returns a dictionary mapping 
 # feature-names to numeric values.
 ## TODO: modify these functions, and/or add new ones.
@@ -98,7 +58,7 @@ def first_last_system_call_feats(tree):
         if el.tag == "all_section" and not in_all_section:
             in_all_section = True
         elif el.tag == "all_section" and in_all_section:
-            in_all_section = False
+           in_all_section = False
         elif in_all_section:
             if first:
                 c["first_call-"+el.tag] = 1

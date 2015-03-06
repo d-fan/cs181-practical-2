@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Mar  5 15:20:36 2015
+
+@author: Cameron
+"""
+
 ## This file provides starter code for extracting features from the xml files and
 ## for doing some learning.
 ##
@@ -73,18 +80,19 @@ try:
 except ImportError:
     import xml.etree.ElementTree as ET
 import numpy as np
-from scipy import stats
 from scipy import sparse
-import extractors
-from extractors import ffs
+import extractors_old
+from extractors_old import ffs
 from numpy import matlib, exp
 import matplotlib.pyplot as plt
 import sklearn.linear_model
+from sklearn.decomposition import PCA
+from sklearn.ensemble import RandomForestClassifier
 import pickle
 import util
 import sys
 
-def extract_feats(ffs, direc="train", global_feat_dict=None, silent=True):
+def extract_feats(ffs, direc="train", global_feat_dict=None):
     """
     arguments:
       ffs are a list of feature-functions.
@@ -105,11 +113,7 @@ def extract_feats(ffs, direc="train", global_feat_dict=None, silent=True):
     fds = [] # list of feature dicts
     classes = []
     ids = [] 
-    directory = os.listdir(direc)
-    file_count = len(directory)
-    for index, datafile in enumerate(directory):
-        if not silent and index % 100 == 0:
-            print "   Extracted %d of %d" % (index, file_count)
+    for datafile in os.listdir(direc):
         # extract id and true class (if available) from filename
         # Keep it clazzy
         id_str,clazz = datafile.split('.')[:2]
@@ -259,57 +263,15 @@ def sk_logistic(features, targets, regularization = 0.001):
         return logreg.predict(feat)[0]
     return predictor, logreg
 
-def train_generative(X, T, num_classes):
-    """
-    arguments:
-        X is a numpy array containing all the data points
-        T is the corresponding numpy array containing the classes the X[i] are in
-
-    returns:
-        an array of the distributions of the multiv normals for each class
-    """
-    # number of data points
-    n = len(T) 
-    # expand the matrix
-    X = np.array(X.todense())
-    # number of features
-    d = X.shape[1]
-    # separate into different lists by class
-    classes = [[]] * d
-    for x, t in zip(X,T):
-        classes[t].append(x)
-    # a list of (mean,cov) for each class
-    distribs = []
-    # calculate the mean/covariance of each class
-    for i in xrange(d):
-        data = np.array(classes[i])
-        mean = np.mean(data, axis=0)
-        cov = np.cov(data.T)
-        # store
-        distribs.append((mean, cov))
-    return distribs
-
-
-def gen_classifier(X, distribs):
-    """
-    arguments:
-        X is the array of features for the test data.
-        distribs is the list of (mean, cov) pairs for each classifier
-        outputfile is the path to the file where we'll make our predictions
-    returns
-        the array of predictions
-    """
-    # expand the matrix
-    X = np.array(X.todense())
-    preds = []
-
-    for x in X:
-        probs = [stats.multivariate_normal.pdf(x, mean=mean, cov=cov, allow_singular=True) for (mean,cov) in distribs]
-        preds.append(np.argmax(probs))
-    return preds
+def sk_random_forest(features, targets, num_trees = 10, max_leaves = None):
+    random_forest = RandomForestClassifier(n_estimators = num_trees, max_leaf_nodes = max_leaves)
+    random_forest.fit(features,targets)
+    def predictor(feat):
+        return random_forest.predict(feat)[0]
+    return predictor, random_forest
 
 ## The following function does the feature extraction, learning, and prediction
-def main(load = False, test=False):
+def main(load = False):
     train_dir = "train"
     test_dir = "test"
     outputfile = "mypredictions.csv"  # feel free to change this or take it as an argument
@@ -317,7 +279,19 @@ def main(load = False, test=False):
     if not load:
         # extract features
         print "extracting training features..."
-        X_train,global_feat_dict,t_train,train_ids = extract_feats(ffs, train_dir)
+        Xs,global_feat_dict,ts,ids = extract_feats(ffs, train_dir)
+        
+        n = Xs.shape[0]
+        train_pct = 0.8
+        test_pct = 1- train_pct
+        
+        X_train = Xs[:int(n*train_pct)]
+        t_train = ts[:int(n*train_pct)]
+        train_ids = ids[:int(n*train_pct)]
+        
+        X_holdout = Xs[int(n*train_pct):n]
+        t_holdout = ts[int(n*train_pct):n]
+        holdout_ids = ids[int(n*train_pct):n]
         print "done extracting training features"
         print
         print "Saving features"
@@ -334,60 +308,54 @@ def main(load = False, test=False):
     else:
         print "Loading previous features"
         with open("X_train", "r")           as out: X_train =           pickle.load(out)
-
         with open("global_feat_dict", "r")  as out: global_feat_dict =  pickle.load(out)
-
         with open("t_train", "r")           as out: t_train =           pickle.load(out)
-
         with open("train_ids", "r")         as out: train_ids =         pickle.load(out)
         print "Done loading"
         print
     
+    #Learn a PCA model, then transform the training and test data
+    #pca = PCA(n_components = 15)
+    #pca.fit(X_train.toarray())
+    #X_train_pca = pca.transform(X_train.toarray())
+    
+    
     # TODO train here, and learn your classification parameters
     print "learning..."
-    predictor, _ = sk_logistic(X_train, t_train)
-    # distribs = train_generative(X_train, t_train, len(global_feat_dict))
+    predictor, random_forest = sk_random_forest(X_train.toarray(), t_train)
     # Start with logistic regression
     print "done learning"
     print
     
     # get rid of training data and load test data
-    # del X_train
-    # del t_train
-    # del train_ids
-    print "extracting test features..."
-    X_test,_,t_ignore,test_ids = extract_feats(ffs, test_dir, global_feat_dict=global_feat_dict)
-    print "done extracting test features"
-    print
+    #del X_train
+    #del t_train
+    #del train_ids
+    #print "extracting test features..."
+    #X_test,_,t_ignore,test_ids = extract_feats(ffs, test_dir, global_feat_dict=global_feat_dict)
+    #print "done extracting test features"
+    #print
     
     # TODO make predictions on text data and write them out
-    error = 0
-    total = X_train.shape[0]
+    #X_holdout_pca = pca.transform(X_holdout.toarray())
+    #error = 0
+    #total = X_holdout.shape[0]
     print "making predictions..."
-    # preds = np.argmax(X_test.dot(learned_W),axis=1)
-    # preds = gen_classifier(X_train, distribs)
-    # for t_id, p, t in zip(train_ids, preds, t_train):
-    #     if (p != t):
-    #         print "%s: expected %d but got %d" % (t_id, t, p)
-    #         error += 1
-    if test:
-        preds = []
-        for x in X_test:
-            preds.append(predictor(x))
-    else:
-        for index, feats in enumerate(X_train):
-            prediction = predictor(feats)
-            if (prediction != t_train[index]):
-                print "%s: expected %d but got %d" % (train_ids[index], t_train[index], prediction)
-                error += 1
-        print "Correct: %d, Incorrect: %d, Total: %d, Accuracy: %f" % (total - error, error, total, (total - error) / (1.0 * total))
+    #preds = np.argmax(X_test.dot(learned_W),axis=1)
+    #preds = logreg.predict(X_test)
+    for index, feats in enumerate(X_holdout.toarray()):
+        prediction = predictor(feats)
+        if (prediction != t_holdout[index]):
+            print "%s: expected %d but got %d" % (holdout_ids[index], t_holdout[index], prediction)
+            error += 1
+    print "Correct: %d, Incorrect: %d, Total: %d, Accuracy: %f" % (total - error, error, total, (total - error) / (1.0 * total))
     print "done making predictions"
     print
     
-    print "writing predictions..."
-    util.write_predictions(preds, test_ids, outputfile)
-    print "done!"
+    #print "writing predictions..."
+    #util.write_predictions(preds, test_ids, outputfile)
+    #print "done!"
 
 if __name__ == "__main__":
-    main("load" in sys.argv, "test" in sys.argv)
+    main("load" in sys.argv)
     
